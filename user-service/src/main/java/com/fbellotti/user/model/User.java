@@ -7,35 +7,26 @@ import java.util.concurrent.atomic.AtomicInteger;
  */
 public class User {
 
-  private static final AtomicInteger COUNTER = new AtomicInteger();
-
-  private final int id;
-
-  private String userName;
+  private String id;
+  private String username;
   private String password;
   private String firstName;
   private String lastName;
 
-  public User() {
-    this.id = COUNTER.getAndIncrement();
-  }
-
-  public User(String userName, String password) {
-    this.id = COUNTER.getAndIncrement();
-    this.userName = userName;
-    this.password = password;
-  }
-
-  public int getId() {
+  public String getId() {
     return id;
   }
 
-  public String getUserName() {
-    return userName;
+  public void setId(String id) {
+    this.id = id;
   }
 
-  public void setUserName(String userName) {
-    this.userName = userName;
+  public String getUsername() {
+    return username;
+  }
+
+  public void setUsername(String username) {
+    this.username = username;
   }
 
   public String getPassword() {
