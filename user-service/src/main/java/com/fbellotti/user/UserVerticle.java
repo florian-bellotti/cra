@@ -1,11 +1,11 @@
 package com.fbellotti.user;
 
-import io.vertx.core.Vertx;
+import com.fbellotti.user.database.UserDatabaseService;
+import io.vertx.core.Future;
+import io.vertx.core.eventbus.DeliveryOptions;
 import io.vertx.core.json.JsonObject;
-import io.vertx.ext.mongo.MongoClient;
 import io.vertx.ext.web.handler.BodyHandler;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+
 import com.fbellotti.user.model.Error;
 import com.fbellotti.user.model.User;
 import io.vertx.core.AbstractVerticle;
@@ -13,45 +13,28 @@ import io.vertx.core.json.Json;
 import io.vertx.ext.web.Router;
 import io.vertx.ext.web.RoutingContext;
 
-import java.util.List;
-
 /**
  * @author <a href="http://fbellotti.com">Florian BELLOTTI</a>
  */
 public class UserVerticle extends AbstractVerticle {
 
-  private static final Logger LOG = LoggerFactory.getLogger(UserVerticle.class);
-  private MongoClient mongo;
+  private static final String CONFIG_USERDB_QUEUE = "userdb.queue";
 
   @Override
-  public void start() {
-    JsonObject config = Vertx.currentContext().config();
-    String uri = config.getString("mongo_uri");
-    if (uri == null) {
-      uri = "mongodb://localhost:27017";
-    }
-    String db = config.getString("mongo_db");
-    if (db == null) {
-      db = "test";
-    }
-
-    System.out.println("uri : " + uri);
-    System.out.println("uri : " + uri);
-    System.out.println("db : " + db);
-    JsonObject mongoconfig = new JsonObject()
-      .put("connection_string", uri)
-      .put("db_name", db);
-
-    mongo = MongoClient.createShared(vertx, mongoconfig);
+  public void start(Future<Void> startFuture) {
+    String userDbQueue = config().getString(CONFIG_USERDB_QUEUE, "wikidb.queue");
+    UserDatabaseService dbService = UserDatabaseService.createProxy(vertx, userDbQueue);
 
     // Defines routes
+    Router routerApi = Router.router(vertx);
     Router router = Router.router(vertx);
-    router.route("/*").handler(BodyHandler.create());
-    router.get("/").handler(this::getAllUser);
-    router.get("/:id").handler(this::readUser);
-    router.post("/").handler(this::createUser);
-    router.put("/:id").handler(this::updateUser);
-    router.delete("/:id").handler(this::deleteUser);
+    routerApi.route("/*").handler(BodyHandler.create());
+    routerApi.get("/").handler(this::getAllUser);
+    routerApi.get("/:id").handler(this::readUser);
+    routerApi.post("/").handler(this::createUser);
+    routerApi.put("/:id").handler(this::updateUser);
+    routerApi.delete("/:id").handler(this::deleteUser);
+    router.mountSubRouter("/users", routerApi);
 
     // Create the http server
     vertx.createHttpServer()
@@ -60,15 +43,16 @@ public class UserVerticle extends AbstractVerticle {
   }
 
   private void getAllUser(RoutingContext rc) {
-    // get all in database
-    mongo.find("users", new JsonObject(), res -> {
-      if (res.succeeded()) {
+    DeliveryOptions options = new DeliveryOptions().addHeader("action", "findAllUsers");
+
+    vertx.eventBus().send(CONFIG_USERDB_QUEUE, new JsonObject(), options, reply -> {
+      if (reply.succeeded()) {
         rc.response()
           .setStatusCode(200)
           .putHeader("content-type", "application/json; charset=utf-8")
-          .end(Json.encodePrettily(res.result()));
+          .end(Json.encodePrettily(reply.result()));
       } else {
-        res.cause().printStackTrace();
+        reply.cause().printStackTrace();
         rc.response()
           .setStatusCode(500)
           .putHeader("content-type", "application/json; charset=utf-8")
@@ -78,14 +62,17 @@ public class UserVerticle extends AbstractVerticle {
   }
 
   private void readUser(RoutingContext rc) {
-    mongo.find("users", new JsonObject().put("_id", rc.request().getParam("id")), res -> {
-      if (res.succeeded()) {
+    JsonObject request = new JsonObject()
+      .put("id", rc.request().getParam("id"));
+    DeliveryOptions options = new DeliveryOptions().addHeader("action", "findUserById");
+
+    vertx.eventBus().send(CONFIG_USERDB_QUEUE, request, options, reply -> {
+      if (reply.succeeded()) {
         rc.response()
           .setStatusCode(200)
           .putHeader("content-type", "application/json; charset=utf-8")
-          .end(Json.encodePrettily(res.result()));
+          .end(Json.encodePrettily(reply.result()));
       } else {
-        res.cause().printStackTrace();
         rc.response()
           .setStatusCode(500)
           .putHeader("content-type", "application/json; charset=utf-8")
@@ -106,15 +93,17 @@ public class UserVerticle extends AbstractVerticle {
         .end(Json.encodePrettily(error));
     }
 
-    mongo.save("users", rc.getBodyAsJson(), res -> {
-      if (res.succeeded()) {
-        user.setId(res.result());
+    JsonObject request = new JsonObject()
+      .put("user", rc.getBodyAsJson());
+    DeliveryOptions options = new DeliveryOptions().addHeader("action", "createUser");
+
+    vertx.eventBus().send(CONFIG_USERDB_QUEUE, request, options, reply -> {
+      if (reply.succeeded()) {
         rc.response()
           .setStatusCode(201)
           .putHeader("content-type", "application/json; charset=utf-8")
-          .end(Json.encodePrettily(user));
+          .end(Json.encodePrettily(reply.result()));
       } else {
-        res.cause().printStackTrace();
         rc.response()
           .setStatusCode(500)
           .putHeader("content-type", "application/json; charset=utf-8")
@@ -125,16 +114,18 @@ public class UserVerticle extends AbstractVerticle {
 
 
   private void updateUser(RoutingContext rc) {
-    JsonObject query = new JsonObject().put("_id", rc.request().getParam("id"));
+    JsonObject request = new JsonObject()
+      .put("id", rc.request().getParam("id"))
+      .put("user", rc.getBodyAsJson());
+    DeliveryOptions options = new DeliveryOptions().addHeader("action", "updateUserById");
 
-    mongo.updateCollection("users", query, new JsonObject().put("$set", rc.getBodyAsJson()), res -> {
-      if (res.succeeded()) {
+    vertx.eventBus().send(CONFIG_USERDB_QUEUE, request, options, reply -> {
+      if (reply.succeeded()) {
         rc.response()
           .setStatusCode(204)
           .putHeader("content-type", "application/json; charset=utf-8")
           .end();
       } else {
-        res.cause().printStackTrace();
         rc.response()
           .setStatusCode(500)
           .putHeader("content-type", "application/json; charset=utf-8")
@@ -144,14 +135,16 @@ public class UserVerticle extends AbstractVerticle {
   }
 
   private void deleteUser(RoutingContext rc) {
-    mongo.removeDocument("users", new JsonObject().put("_id", rc.request().getParam("id")), res -> {
-      if (res.succeeded()) {
+    JsonObject request = new JsonObject().put("id", rc.request().getParam("id"));
+    DeliveryOptions options = new DeliveryOptions().addHeader("action", "deleteUserById");
+
+    vertx.eventBus().send(CONFIG_USERDB_QUEUE, request, options, reply -> {
+      if (reply.succeeded()) {
         rc.response()
           .setStatusCode(204)
           .putHeader("content-type", "application/json; charset=utf-8")
           .end();
       } else {
-        res.cause().printStackTrace();
         rc.response()
           .setStatusCode(500)
           .putHeader("content-type", "application/json; charset=utf-8")
