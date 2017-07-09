@@ -1,4 +1,4 @@
-package com.fbellotti.user;
+package com.fbellotti.user.http;
 
 import com.fbellotti.user.database.UserDatabaseService;
 import com.fbellotti.user.database.UserDatabaseVerticle;
@@ -17,7 +17,7 @@ import io.vertx.ext.web.RoutingContext;
 /**
  * @author <a href="http://fbellotti.com">Florian BELLOTTI</a>
  */
-public class UserVerticle extends AbstractVerticle {
+public class HttpServerVerticle extends AbstractVerticle {
 
   @Override
   public void start(Future<Void> startFuture) {

@@ -19,7 +19,7 @@ import org.junit.runner.RunWith;
  * @author <a href="http://fbellotti.com">Florian BELLOTTI</a>
  */
 @RunWith(VertxUnitRunner.class)
-public class GlobalTest {
+public class UserDatabaseTest {
 
   private Vertx vertx;
   private UserDatabaseService service;
