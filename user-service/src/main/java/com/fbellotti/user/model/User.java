@@ -7,18 +7,18 @@ import java.util.concurrent.atomic.AtomicInteger;
  */
 public class User {
 
-  private String id;
+  public String _id;
   private String username;
   private String password;
   private String firstName;
   private String lastName;
 
   public String getId() {
-    return id;
+    return _id;
   }
 
   public void setId(String id) {
-    this.id = id;
+    this._id = id;
   }
 
   public String getUsername() {

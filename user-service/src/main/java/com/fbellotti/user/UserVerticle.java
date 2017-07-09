@@ -1,6 +1,7 @@
 package com.fbellotti.user;
 
 import com.fbellotti.user.database.UserDatabaseService;
+import com.fbellotti.user.database.UserDatabaseVerticle;
 import io.vertx.core.Future;
 import io.vertx.core.eventbus.DeliveryOptions;
 import io.vertx.core.json.JsonObject;
@@ -18,11 +19,9 @@ import io.vertx.ext.web.RoutingContext;
  */
 public class UserVerticle extends AbstractVerticle {
 
-  private static final String CONFIG_USERDB_QUEUE = "userdb.queue";
-
   @Override
   public void start(Future<Void> startFuture) {
-    String userDbQueue = config().getString(CONFIG_USERDB_QUEUE, "wikidb.queue");
+    String userDbQueue = config().getString(UserDatabaseVerticle.CONFIG_USERDB_QUEUE, "wikidb.queue");
     UserDatabaseService dbService = UserDatabaseService.createProxy(vertx, userDbQueue);
 
     // Defines routes
@@ -45,12 +44,12 @@ public class UserVerticle extends AbstractVerticle {
   private void getAllUser(RoutingContext rc) {
     DeliveryOptions options = new DeliveryOptions().addHeader("action", "findAllUsers");
 
-    vertx.eventBus().send(CONFIG_USERDB_QUEUE, new JsonObject(), options, reply -> {
+    vertx.eventBus().send(UserDatabaseVerticle.CONFIG_USERDB_QUEUE, new JsonObject(), options, reply -> {
       if (reply.succeeded()) {
         rc.response()
           .setStatusCode(200)
           .putHeader("content-type", "application/json; charset=utf-8")
-          .end(Json.encodePrettily(reply.result()));
+          .end(Json.encodePrettily(reply));
       } else {
         reply.cause().printStackTrace();
         rc.response()
@@ -66,12 +65,12 @@ public class UserVerticle extends AbstractVerticle {
       .put("id", rc.request().getParam("id"));
     DeliveryOptions options = new DeliveryOptions().addHeader("action", "findUserById");
 
-    vertx.eventBus().send(CONFIG_USERDB_QUEUE, request, options, reply -> {
+    vertx.eventBus().send(UserDatabaseVerticle.CONFIG_USERDB_QUEUE, request, options, reply -> {
       if (reply.succeeded()) {
         rc.response()
           .setStatusCode(200)
           .putHeader("content-type", "application/json; charset=utf-8")
-          .end(Json.encodePrettily(reply.result()));
+          .end(Json.encodePrettily(reply));
       } else {
         rc.response()
           .setStatusCode(500)
@@ -97,7 +96,7 @@ public class UserVerticle extends AbstractVerticle {
       .put("user", rc.getBodyAsJson());
     DeliveryOptions options = new DeliveryOptions().addHeader("action", "createUser");
 
-    vertx.eventBus().send(CONFIG_USERDB_QUEUE, request, options, reply -> {
+    vertx.eventBus().send(UserDatabaseVerticle.CONFIG_USERDB_QUEUE, request, options, reply -> {
       if (reply.succeeded()) {
         rc.response()
           .setStatusCode(201)
@@ -119,7 +118,7 @@ public class UserVerticle extends AbstractVerticle {
       .put("user", rc.getBodyAsJson());
     DeliveryOptions options = new DeliveryOptions().addHeader("action", "updateUserById");
 
-    vertx.eventBus().send(CONFIG_USERDB_QUEUE, request, options, reply -> {
+    vertx.eventBus().send(UserDatabaseVerticle.CONFIG_USERDB_QUEUE, request, options, reply -> {
       if (reply.succeeded()) {
         rc.response()
           .setStatusCode(204)
@@ -138,7 +137,7 @@ public class UserVerticle extends AbstractVerticle {
     JsonObject request = new JsonObject().put("id", rc.request().getParam("id"));
     DeliveryOptions options = new DeliveryOptions().addHeader("action", "deleteUserById");
 
-    vertx.eventBus().send(CONFIG_USERDB_QUEUE, request, options, reply -> {
+    vertx.eventBus().send(UserDatabaseVerticle.CONFIG_USERDB_QUEUE, request, options, reply -> {
       if (reply.succeeded()) {
         rc.response()
           .setStatusCode(204)

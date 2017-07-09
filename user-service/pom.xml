@@ -52,6 +52,19 @@
             <artifactId>vertx-codegen</artifactId>
             <scope>provided</scope>
         </dependency>
+
+        <dependency>
+            <groupId>junit</groupId>
+            <artifactId>junit</artifactId>
+            <version>4.12</version>
+            <scope>test</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>io.vertx</groupId>
+            <artifactId>vertx-unit</artifactId>
+            <scope>test</scope>
+        </dependency>
     </dependencies>
 
     <build>
@@ -83,7 +96,7 @@
                     <annotationProcessors>
                         <annotationProcessor>io.vertx.codegen.CodeGenProcessor</annotationProcessor>
                     </annotationProcessors>
-                    <generatedSourcesDirectory>${project.basedir}/src/main/java</generatedSourcesDirectory>
+                    <generatedSourcesDirectory>${project.basedir}/src/main/generated</generatedSourcesDirectory>
                     <compilerArgs>
                         <arg>-AoutputDirectory=${project.basedir}/src/main</arg>
                     </compilerArgs>

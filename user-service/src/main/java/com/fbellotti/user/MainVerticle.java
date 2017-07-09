@@ -14,17 +14,14 @@ public class MainVerticle extends AbstractVerticle {
   public void start(Future<Void> startFuture) throws Exception {
 
     Future<String> dbVerticleDeployment = Future.future();
-    vertx.deployVerticle(new UserDatabaseVerticle());
-    Thread.sleep(3000);
-    vertx.deployVerticle(new UserVerticle());
-/*
+    vertx.deployVerticle(new UserDatabaseVerticle(), dbVerticleDeployment.completer());
+
     dbVerticleDeployment.compose(id -> {
       Future<String> httpVerticleDeployment = Future.future();
       vertx.deployVerticle(
-        "com.fbellotti.user.UserVerticlle",
-        new DeploymentOptions().setInstances(2),
-        httpVerticleDeployment.completer()
-      );
+        "com.fbellotti.user.UserVerticle",
+      new DeploymentOptions().setInstances(2),
+      httpVerticleDeployment.completer());
       return httpVerticleDeployment;
     }).setHandler(ar -> {
       if (ar.succeeded()) {
@@ -32,6 +29,6 @@ public class MainVerticle extends AbstractVerticle {
       } else {
         startFuture.fail(ar.cause());
       }
-    });*/
+    });
   }
 }
