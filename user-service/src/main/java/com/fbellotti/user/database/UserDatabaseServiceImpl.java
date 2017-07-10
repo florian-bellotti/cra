@@ -54,7 +54,7 @@ public class UserDatabaseServiceImpl implements UserDatabaseService {
   public UserDatabaseService findUserById(String id, Handler<AsyncResult<JsonObject>> resultHandler) {
     mongo.find("users", new JsonObject().put("_id", id), res -> {
       if (res.succeeded()) {
-        if (res.result() != null) {
+        if (res.result() != null && res.result().size() != 0) {
           resultHandler.handle(Future.succeededFuture(res.result().get(0)));
         } else {
           resultHandler.handle(Future.succeededFuture());
