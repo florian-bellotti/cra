@@ -1,6 +1,5 @@
 package com.fbellotti.user;
 
-import com.fbellotti.user.database.UserDatabaseService;
 import com.fbellotti.user.database.UserDatabaseVerticle;
 import com.fbellotti.user.http.HttpServerVerticle;
 import io.vertx.core.DeploymentOptions;
@@ -70,54 +69,49 @@ public class ApiTest {
       });
 
     Future<JsonArray> getAllRequest = Future.future();
-    postRequest.compose(h -> {
-      webClient.get("/users")
-        .as(BodyCodec.jsonArray())
-        .send(ar -> {
-          if (ar.succeeded()) {
-            HttpResponse<JsonArray> getAllResponse = ar.result();
-            Assert.assertEquals("[{\"_id\":\"111\",\"username\":\"florian\",\"password\":\"florian\"}]",
-              getAllResponse.body().encode());
-            getAllRequest.complete(getAllResponse.body());
-          } else {
-            context.fail(ar.cause());
-          }
-        });
-    }, getAllRequest);
+    postRequest.compose(h -> webClient.get("/users")
+      .as(BodyCodec.jsonArray())
+      .send(ar -> {
+        if (ar.succeeded()) {
+          HttpResponse<JsonArray> getAllResponse = ar.result();
+          Assert.assertEquals("[{\"_id\":\"111\",\"username\":\"florian\",\"password\":\"florian\"}]",
+            getAllResponse.body().encode());
+          getAllRequest.complete(getAllResponse.body());
+        } else {
+          context.fail(ar.cause());
+        }
+      }), getAllRequest);
 
     Future<JsonObject> getRequest = Future.future();
-    getAllRequest.compose(h -> {
-      webClient.get("/users/111")
-        .as(BodyCodec.jsonObject())
-        .send(ar -> {
-          if (ar.succeeded()) {
-            HttpResponse<JsonObject> getResponse = ar.result();
-            Assert.assertEquals("{\"_id\":\"111\",\"username\":\"florian\",\"password\":\"florian\"}",
-              getResponse.body().encode());
-            getRequest.complete(getResponse.body());
-          } else {
-            context.fail(ar.cause());
-          }
-        });
-    }, getRequest);
+    getAllRequest.compose(h -> webClient
+      .get("/users/111")
+      .as(BodyCodec.jsonObject())
+      .send(ar -> {
+        if (ar.succeeded()) {
+          HttpResponse<JsonObject> getResponse = ar.result();
+          Assert.assertEquals("{\"_id\":\"111\",\"username\":\"florian\",\"password\":\"florian\"}",
+            getResponse.body().encode());
+          getRequest.complete(getResponse.body());
+        } else {
+          context.fail(ar.cause());
+        }
+      }), getRequest);
 
     Future<JsonObject> deleteRequest = Future.future();
-    getRequest.compose(h -> {
-      webClient.delete("/users/111")
-        .as(BodyCodec.jsonObject())
-        .send(ar -> {
-          if (ar.succeeded()) {
-            HttpResponse<JsonObject> deleteResponse = ar.result();
-            deleteRequest.complete(deleteResponse.body());
-          } else {
-            context.fail(ar.cause());
-          }
-        });
-    }, deleteRequest);
+    getRequest.compose(h -> webClient
+      .delete("/users/111")
+      .as(BodyCodec.jsonObject())
+      .send(ar -> {
+        if (ar.succeeded()) {
+          HttpResponse<JsonObject> deleteResponse = ar.result();
+          deleteRequest.complete(deleteResponse.body());
+        } else {
+          context.fail(ar.cause());
+        }
+      }), deleteRequest);
 
-    deleteRequest.compose(response -> {
-      async.complete();
-    }, Future.failedFuture("Oh?"));
+    deleteRequest.compose(response -> async.complete(),
+      Future.failedFuture("Oh?"));
   }
 
   @After

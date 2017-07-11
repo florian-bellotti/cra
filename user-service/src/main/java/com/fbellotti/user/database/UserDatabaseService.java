@@ -1,6 +1,5 @@
 package com.fbellotti.user.database;
 
-import com.fbellotti.user.model.User;
 import io.vertx.codegen.annotations.Fluent;
 import io.vertx.codegen.annotations.ProxyGen;
 import io.vertx.core.AsyncResult;

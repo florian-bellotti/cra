@@ -18,7 +18,7 @@ public class UserDatabaseServiceImpl implements UserDatabaseService {
 
   private final MongoClient mongo;
 
-  public UserDatabaseServiceImpl(MongoClient mongo, Handler<AsyncResult<UserDatabaseService>> readyHandler) {
+  UserDatabaseServiceImpl(MongoClient mongo, Handler<AsyncResult<UserDatabaseService>> readyHandler) {
     this.mongo = mongo;
     readyHandler.handle(Future.succeededFuture(this));
   }
