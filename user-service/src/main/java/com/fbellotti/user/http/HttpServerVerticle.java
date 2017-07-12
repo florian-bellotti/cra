@@ -3,8 +3,12 @@ package com.fbellotti.user.http;
 import com.fbellotti.user.database.UserDatabaseService;
 import com.fbellotti.user.database.UserDatabaseVerticle;
 import io.vertx.core.Future;
+import io.vertx.core.http.HttpServerOptions;
+import io.vertx.core.json.JsonObject;
 import io.vertx.core.logging.Logger;
 import io.vertx.core.logging.LoggerFactory;
+import io.vertx.core.net.JksOptions;
+import io.vertx.ext.auth.jwt.JWTAuth;
 import io.vertx.ext.web.handler.BodyHandler;
 
 import com.fbellotti.user.model.Error;
@@ -13,28 +17,39 @@ import io.vertx.core.AbstractVerticle;
 import io.vertx.core.json.Json;
 import io.vertx.ext.web.Router;
 import io.vertx.ext.web.RoutingContext;
+import io.vertx.ext.web.handler.JWTAuthHandler;
 
 /**
  * @author <a href="http://fbellotti.com">Florian BELLOTTI</a>
  */
 public class HttpServerVerticle extends AbstractVerticle {
 
-
   private static final Logger LOGGER = LoggerFactory.getLogger(HttpServerVerticle.class);
+
   private UserDatabaseService dbService;
+  private JWTAuth jwtAuth;
 
   @Override
   public void start(Future<Void> startFuture) {
     String userDbQueue = config().getString(UserDatabaseVerticle.CONFIG_USERDB_QUEUE, "userdb.queue");
     dbService = UserDatabaseService.createProxy(vertx, userDbQueue);
 
+    // Secure api
+    /*jwtAuth = JWTAuth.create(vertx, new JsonObject()
+      .put("keyStore", new JsonObject()
+        .put("path", "keystore.jceks")
+        .put("type", "jceks")
+        .put("password", "secret")));
+*/
     // Defines routes
     Router routerApi = Router.router(vertx);
     Router router = Router.router(vertx);
+   // routerApi.route().handler(JWTAuthHandler.create(jwtAuth, "/api/token"));
     routerApi.get("/").handler(this::getAllUser);
     routerApi.get("/:id").handler(this::readUser);
     routerApi.post().handler(BodyHandler.create());
     routerApi.post("/").handler(this::createUser);
+    routerApi.post("/openSession").handler(this::openSession);
     routerApi.put().handler(BodyHandler.create());
     routerApi.put("/:id").handler(this::updateUser);
     routerApi.delete("/:id").handler(this::deleteUser);
@@ -109,6 +124,44 @@ public class HttpServerVerticle extends AbstractVerticle {
           .end(Json.encodePrettily(res.result()));
       } else {
         LOGGER.error("Failed to create user " + user.getUsername(), res.cause());
+        executionError(rc);
+      }
+    });
+  }
+
+  private void openSession(RoutingContext rc) {
+    User user = Json.decodeValue(rc.getBodyAsString(), User.class);
+
+    // Check the received user
+    Error error = checkUser(user);
+    if (error != null) {
+      rc.response()
+        .setStatusCode(400)
+        .putHeader("content-type", "application/json; charset=utf-8")
+        .end(Json.encodePrettily(error));
+    }
+
+    JsonObject creds = new JsonObject()
+      .put("username", user.getUsername())
+      .put("password", user.getPassword());
+
+
+    dbService.authenticate(creds, res -> {
+      if (res.succeeded()) {
+        if (res.result() != null) {
+          rc.response()
+            .setStatusCode(200)
+            .putHeader("content-type", "application/json; charset=utf-8")
+            .end(Json.encodePrettily(res.result()));
+        } else {
+          rc.response()
+            .setStatusCode(400)
+            .putHeader("content-type", "application/json; charset=utf-8")
+            .end(Json.encodePrettily(new Error(
+              "INVALID_PARAMETERS", "The username or password are invalid.")));
+        }
+      } else {
+        LOGGER.error("Failed to authenticate user " + user.getUsername(), res.cause());
         executionError(rc);
       }
     });

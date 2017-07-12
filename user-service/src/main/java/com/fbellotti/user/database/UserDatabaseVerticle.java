@@ -3,6 +3,8 @@ package com.fbellotti.user.database;
 import io.vertx.core.AbstractVerticle;
 import io.vertx.core.Future;
 import io.vertx.core.json.JsonObject;
+import io.vertx.ext.auth.mongo.HashSaltStyle;
+import io.vertx.ext.auth.mongo.MongoAuth;
 import io.vertx.ext.mongo.MongoClient;
 import io.vertx.serviceproxy.ProxyHelper;
 
@@ -22,7 +24,9 @@ public class UserDatabaseVerticle extends AbstractVerticle {
       .put("db_name", config().getString(CONFIG_USERDB_DBNAME, "test"))
     );
 
-    UserDatabaseService.create(mongo, ready -> {
+    MongoAuth authProvider = MongoAuth.create(mongo, new JsonObject());
+
+    UserDatabaseService.create(mongo, authProvider, ready -> {
       if (ready.succeeded()) {
         ProxyHelper.registerService(UserDatabaseService.class, vertx, ready.result(), CONFIG_USERDB_QUEUE);
         startFuture.complete();
