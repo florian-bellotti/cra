@@ -3,7 +3,9 @@ package com.fbellotti.user.database;
 import io.vertx.core.AbstractVerticle;
 import io.vertx.core.Future;
 import io.vertx.core.json.JsonObject;
+import io.vertx.ext.auth.jwt.JWTAuth;
 import io.vertx.ext.auth.mongo.HashSaltStyle;
+import io.vertx.ext.auth.mongo.HashStrategy;
 import io.vertx.ext.auth.mongo.MongoAuth;
 import io.vertx.ext.mongo.MongoClient;
 import io.vertx.serviceproxy.ProxyHelper;
@@ -25,6 +27,13 @@ public class UserDatabaseVerticle extends AbstractVerticle {
     );
 
     MongoAuth authProvider = MongoAuth.create(mongo, new JsonObject());
+
+    // Secure api
+    JWTAuth jwtAuth = JWTAuth.create(vertx, new JsonObject()
+      .put("keyStore", new JsonObject()
+        .put("path", "keystore.jceks")
+        .put("type", "jceks")
+        .put("password", "secret")));
 
     UserDatabaseService.create(mongo, authProvider, ready -> {
       if (ready.succeeded()) {

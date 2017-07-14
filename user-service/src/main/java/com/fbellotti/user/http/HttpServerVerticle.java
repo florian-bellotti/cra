@@ -2,6 +2,7 @@ package com.fbellotti.user.http;
 
 import com.fbellotti.user.database.UserDatabaseService;
 import com.fbellotti.user.database.UserDatabaseVerticle;
+import io.vertx.core.AsyncResult;
 import io.vertx.core.Future;
 import io.vertx.core.http.HttpServerOptions;
 import io.vertx.core.json.JsonObject;
@@ -9,6 +10,7 @@ import io.vertx.core.logging.Logger;
 import io.vertx.core.logging.LoggerFactory;
 import io.vertx.core.net.JksOptions;
 import io.vertx.ext.auth.jwt.JWTAuth;
+import io.vertx.ext.auth.jwt.JWTOptions;
 import io.vertx.ext.web.handler.BodyHandler;
 
 import com.fbellotti.user.model.Error;
@@ -34,17 +36,23 @@ public class HttpServerVerticle extends AbstractVerticle {
     String userDbQueue = config().getString(UserDatabaseVerticle.CONFIG_USERDB_QUEUE, "userdb.queue");
     dbService = UserDatabaseService.createProxy(vertx, userDbQueue);
 
+    HttpServerOptions httpServerOptions = new HttpServerOptions()
+      .setSsl(true)
+      .setKeyStoreOptions(new JksOptions()
+        .setPath("server-keystore.jks")
+        .setPassword("secret"));
+
     // Secure api
-    /*jwtAuth = JWTAuth.create(vertx, new JsonObject()
+    jwtAuth = JWTAuth.create(vertx, new JsonObject()
       .put("keyStore", new JsonObject()
         .put("path", "keystore.jceks")
         .put("type", "jceks")
         .put("password", "secret")));
-*/
+
     // Defines routes
     Router routerApi = Router.router(vertx);
     Router router = Router.router(vertx);
-   // routerApi.route().handler(JWTAuthHandler.create(jwtAuth, "/api/token"));
+    routerApi.route().handler(JWTAuthHandler.create(jwtAuth, "/users/openSession"));
     routerApi.get("/").handler(this::getAllUser);
     routerApi.get("/:id").handler(this::readUser);
     routerApi.post().handler(BodyHandler.create());
@@ -56,7 +64,7 @@ public class HttpServerVerticle extends AbstractVerticle {
     router.mountSubRouter("/users", routerApi);
 
     // Create the http server
-    vertx.createHttpServer()
+    vertx.createHttpServer(httpServerOptions)
       .requestHandler(router::accept)
       .listen(8080, ar -> {
         if (ar.succeeded()) {
@@ -78,7 +86,7 @@ public class HttpServerVerticle extends AbstractVerticle {
           .end(Json.encodePrettily(res.result()));
       } else {
         LOGGER.error("Failed to find all users", res.cause());
-        executionError(rc);
+        executionError(rc, res);
       }
     });
   }
@@ -99,34 +107,41 @@ public class HttpServerVerticle extends AbstractVerticle {
         }
       } else {
         LOGGER.error("Failed to find all users", res.cause());
-        executionError(rc);
+        executionError(rc, res);
       }
     });
   }
 
   private void createUser(RoutingContext rc) {
-    User user = Json.decodeValue(rc.getBodyAsString(), User.class);
+    if (rc.user().principal().getBoolean("canCreate", false)) {
+      User user = Json.decodeValue(rc.getBodyAsString(), User.class);
 
-    // Check the received user
-    Error error = checkUser(user);
-    if (error != null) {
-      rc.response()
-        .setStatusCode(400)
-        .putHeader("content-type", "application/json; charset=utf-8")
-        .end(Json.encodePrettily(error));
-    }
-
-    dbService.createUser(rc.getBodyAsJson(), res -> {
-      if (res.succeeded()) {
+      // Check the received user
+      Error error = checkUser(user);
+      if (error != null) {
         rc.response()
-          .setStatusCode(201)
+          .setStatusCode(400)
           .putHeader("content-type", "application/json; charset=utf-8")
-          .end(Json.encodePrettily(res.result()));
-      } else {
-        LOGGER.error("Failed to create user " + user.getUsername(), res.cause());
-        executionError(rc);
+          .end(Json.encodePrettily(error));
       }
-    });
+
+      dbService.createUser(rc.getBodyAsJson(), res -> {
+        if (res.succeeded()) {
+          rc.response()
+            .setStatusCode(201)
+            .putHeader("content-type", "application/json; charset=utf-8")
+            .end(Json.encodePrettily(res.result()));
+        } else {
+          LOGGER.error("Failed to create user " + user.getUsername(), res.cause());
+          executionError(rc, res);
+        }
+      });
+    } else {
+      rc.response()
+        .setStatusCode(401)
+        .putHeader("content-type", "application/json; charset=utf-8")
+        .end();
+    }
   }
 
   private void openSession(RoutingContext rc) {
@@ -148,21 +163,23 @@ public class HttpServerVerticle extends AbstractVerticle {
 
     dbService.authenticate(creds, res -> {
       if (res.succeeded()) {
-        if (res.result() != null) {
-          rc.response()
-            .setStatusCode(200)
-            .putHeader("content-type", "application/json; charset=utf-8")
-            .end(Json.encodePrettily(res.result()));
-        } else {
-          rc.response()
-            .setStatusCode(400)
-            .putHeader("content-type", "application/json; charset=utf-8")
-            .end(Json.encodePrettily(new Error(
-              "INVALID_PARAMETERS", "The username or password are invalid.")));
-        }
+        io.vertx.ext.auth.User use;
+        String token = jwtAuth.generateToken(
+        new JsonObject()
+          .put("username", user.getUsername())
+          .put("canCreate", true)
+          .put("canDelete", true)
+          .put("canUpdate", true),
+          new JWTOptions()
+            .setSubject("Wiki API")
+            .setIssuer("Vert.x"));
+        rc.response()
+          .setStatusCode(200)
+          .putHeader("content-type", "application/json; charset=utf-8")
+          .end(new JsonObject().put("token", token).encodePrettily());
       } else {
         LOGGER.error("Failed to authenticate user " + user.getUsername(), res.cause());
-        executionError(rc);
+        executionError(rc, res);
       }
     });
   }
@@ -178,7 +195,7 @@ public class HttpServerVerticle extends AbstractVerticle {
           .end();
       } else {
         LOGGER.error("Failed to update user " + id, res.cause());
-        executionError(rc);
+        executionError(rc, res);
       }
     });
   }
@@ -194,7 +211,7 @@ public class HttpServerVerticle extends AbstractVerticle {
           .end();
       } else {
         LOGGER.error("Failed to delete user " + id, res.cause());
-        executionError(rc);
+        executionError(rc, res);
       }
     });
   }
@@ -215,10 +232,10 @@ public class HttpServerVerticle extends AbstractVerticle {
     return null;
   }
 
-  private void executionError(RoutingContext rc) {
+  private void executionError(RoutingContext rc, AsyncResult res) {
     rc.response()
       .setStatusCode(500)
       .putHeader("content-type", "application/json; charset=utf-8")
-      .end(Json.encodePrettily(new Error("EXECUTION_ERROR", "Failed during the request execution")));
+      .end(Json.encodePrettily(new Error("EXECUTION_ERROR", res.cause().getMessage())));
   }
 }

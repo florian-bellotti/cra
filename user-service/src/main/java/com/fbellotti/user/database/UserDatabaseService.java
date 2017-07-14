@@ -8,6 +8,7 @@ import io.vertx.core.Vertx;
 import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
 import io.vertx.ext.auth.User;
+import io.vertx.ext.auth.jwt.JWTAuth;
 import io.vertx.ext.auth.mongo.MongoAuth;
 import io.vertx.ext.mongo.MongoClient;
 
@@ -24,7 +25,7 @@ public interface UserDatabaseService {
   UserDatabaseService createUser(JsonObject user, Handler<AsyncResult<JsonObject>> resultHandler);
 
   @Fluent
-  UserDatabaseService authenticate(JsonObject user, Handler<AsyncResult<JsonObject>> resultHandler);
+  UserDatabaseService authenticate(JsonObject user, Handler<AsyncResult<String>> resultHandler);
 
   @Fluent
   UserDatabaseService findUserById(String id, Handler<AsyncResult<JsonObject>> resultHandler);
@@ -35,7 +36,8 @@ public interface UserDatabaseService {
   @Fluent
   UserDatabaseService deleteUserById(String id, Handler<AsyncResult<Void>> resultHandler);
 
-  static UserDatabaseService create(MongoClient mongo, MongoAuth authProvider, Handler<AsyncResult<UserDatabaseService>> readyHandler) {
+  static UserDatabaseService create(MongoClient mongo, MongoAuth authProvider,
+                                    Handler<AsyncResult<UserDatabaseService>> readyHandler) {
     return new UserDatabaseServiceImpl(mongo, authProvider, readyHandler);
   }
 
