@@ -54,17 +54,20 @@ public class ApiTest {
   public void executeRequests(TestContext context) {
     Async async = context.async();
 
+    String token = "Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJ1c2VybmFtZSI6ImZsb2FyaXR0YW4iLCJjYW5DcmVhdGUiOnRydWUsImNhbkRlbGV0ZSI6dHJ1ZSwiY2FuVXBkYXRlIjp0cnVlLCJjYW5HZXQiOnRydWUsImNhbkdldEFsbCI6dHJ1ZSwiaWF0IjoxNTAwMTM4MTA3LCJpc3MiOiJWZXJ0LngiLCJzdWIiOiJXaWtpIEFQSSJ9.ZKK3geujOcG_HwL_JNIpjUoG06op6WKDIZytBy3M9lE";
+
     JsonObject user = new JsonObject()
-      .put("_id", "111")
       .put("username", "florian")
       .put("password", "florian");
 
     Future<JsonObject> postRequest = Future.future();
     webClient.post("/users")
+      .putHeader("Authorization", token)
       .as(BodyCodec.jsonObject())
       .sendJsonObject(user, ar -> {
         if (ar.succeeded()) {
           HttpResponse<JsonObject> postResponse = ar.result();
+          user.put("_id", postResponse.body().getString("_id"));
           postRequest.complete(postResponse.body());
         } else {
           context.fail(ar.cause());
@@ -73,13 +76,19 @@ public class ApiTest {
 
     Future<JsonArray> getAllRequest = Future.future();
     postRequest.compose(h -> webClient.get("/users")
+      .putHeader("Authorization", token)
       .as(BodyCodec.jsonArray())
       .send(ar -> {
         if (ar.succeeded()) {
           HttpResponse<JsonArray> getAllResponse = ar.result();
-          Assert.assertEquals("[{\"_id\":\"111\",\"username\":\"florian\",\"password\":\"florian\"}]",
-            getAllResponse.body().encode());
-          getAllRequest.complete(getAllResponse.body());
+          try {
+            String username = getAllResponse.body().getJsonObject(0).getString("username");
+            Assert.assertEquals("florian", username);
+            getAllRequest.complete(getAllResponse.body());
+          } catch (Exception e) {
+            e.printStackTrace();
+            context.fail(ar.cause());
+          }
         } else {
           context.fail(ar.cause());
         }
@@ -87,14 +96,20 @@ public class ApiTest {
 
     Future<JsonObject> getRequest = Future.future();
     getAllRequest.compose(h -> webClient
-      .get("/users/111")
+      .get("/users/" + user.getString("_id"))
+      .putHeader("Authorization", token)
       .as(BodyCodec.jsonObject())
       .send(ar -> {
         if (ar.succeeded()) {
           HttpResponse<JsonObject> getResponse = ar.result();
-          Assert.assertEquals("{\"_id\":\"111\",\"username\":\"florian\",\"password\":\"florian\"}",
-            getResponse.body().encode());
-          getRequest.complete(getResponse.body());
+          try {
+            String username = getResponse.body().getString("username");
+            Assert.assertEquals("florian", username);
+            getRequest.complete(getResponse.body());
+          } catch (Exception e) {
+            e.printStackTrace();
+            context.fail(ar.cause());
+          }
         } else {
           context.fail(ar.cause());
         }
@@ -102,7 +117,8 @@ public class ApiTest {
 
     Future<JsonObject> deleteRequest = Future.future();
     getRequest.compose(h -> webClient
-      .delete("/users/111")
+      .delete("/users/" + user.getString("_id"))
+      .putHeader("Authorization", token)
       .as(BodyCodec.jsonObject())
       .send(ar -> {
         if (ar.succeeded()) {

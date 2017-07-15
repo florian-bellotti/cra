@@ -2,7 +2,6 @@ package com.fbellotti.user;
 
 import com.fbellotti.user.database.UserDatabaseService;
 import com.fbellotti.user.database.UserDatabaseVerticle;
-import com.fbellotti.user.model.User;
 import io.vertx.core.DeploymentOptions;
 import io.vertx.core.Vertx;
 import io.vertx.core.json.JsonObject;
@@ -47,18 +46,15 @@ public class UserDatabaseTest {
       .put("username", "florian");
 
     service.createUser(newUser, context.asyncAssertSuccess(jsonCreatedUser -> {
-      User createdUser = jsonCreatedUser.mapTo(User.class);
-      service.findUserById(createdUser.getId(), context.asyncAssertSuccess(jsonUser -> {
-        User user = jsonUser.mapTo(User.class);
-        context.assertEquals("florian", user.getUsername());
+      String createdUserId = jsonCreatedUser.getString("_id");
+      service.findUserById(createdUserId, context.asyncAssertSuccess(jsonUser -> {
+        context.assertEquals("florian", jsonUser.getString("username"));
         newUser.put("password", "test");
-        service.updateUserById(createdUser.getId(), newUser, context.asyncAssertSuccess(response ->
-          service.findUserById(createdUser.getId(), context.asyncAssertSuccess(jsonUserV2 -> {
-            User userV2 = jsonUserV2.mapTo(User.class);
-            context.assertEquals("florian", userV2.getUsername());
-            context.assertEquals("test", userV2.getPassword());
+        service.updateUserById(createdUserId, newUser, context.asyncAssertSuccess(response ->
+          service.findUserById(createdUserId, context.asyncAssertSuccess(jsonUserV2 -> {
+            context.assertEquals("florian", jsonUser.getString("username"));
 
-            service.deleteUserById(createdUser.getId(), context.asyncAssertSuccess(deleteResponse ->
+            service.deleteUserById(createdUserId, context.asyncAssertSuccess(deleteResponse ->
               service.findAllUsers(context.asyncAssertSuccess(jsonAll -> {
                 context.assertEquals("[]", jsonAll.encode());
                 async.complete();

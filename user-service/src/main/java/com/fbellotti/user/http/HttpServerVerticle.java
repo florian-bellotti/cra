@@ -78,38 +78,52 @@ public class HttpServerVerticle extends AbstractVerticle {
   }
 
   private void getAllUser(RoutingContext rc) {
-    dbService.findAllUsers(res -> {
-      if (res.succeeded()) {
-        rc.response()
-          .setStatusCode(200)
-          .putHeader("content-type", "application/json; charset=utf-8")
-          .end(Json.encodePrettily(res.result()));
-      } else {
-        LOGGER.error("Failed to find all users", res.cause());
-        executionError(rc, res);
-      }
-    });
-  }
-
-  private void readUser(RoutingContext rc) {
-    dbService.findUserById(rc.request().getParam("id"), res -> {
-      if (res.succeeded()) {
-        if (res.result() == null || res.result().getString("_id") == null) {
-          rc.response()
-            .setStatusCode(404)
-            .putHeader("content-type", "application/json; charset=utf-8")
-            .end(Json.encodePrettily(new Error("NOT_FOUND", "User not found")));
-        } else {
+    if (rc.user().principal().getBoolean("canGetAll", false)) {
+      dbService.findAllUsers(res -> {
+        if (res.succeeded()) {
           rc.response()
             .setStatusCode(200)
             .putHeader("content-type", "application/json; charset=utf-8")
             .end(Json.encodePrettily(res.result()));
+        } else {
+          LOGGER.error("Failed to find all users", res.cause());
+          executionError(rc, res);
         }
-      } else {
-        LOGGER.error("Failed to find all users", res.cause());
-        executionError(rc, res);
-      }
-    });
+      });
+    } else {
+      rc.response()
+        .setStatusCode(401)
+        .putHeader("content-type", "application/json; charset=utf-8")
+        .end();
+    }
+  }
+
+  private void readUser(RoutingContext rc) {
+    if (rc.user().principal().getBoolean("canGet", false)) {
+      dbService.findUserById(rc.request().getParam("id"), res -> {
+        if (res.succeeded()) {
+          if (res.result() == null || res.result().getString("_id") == null) {
+            rc.response()
+              .setStatusCode(404)
+              .putHeader("content-type", "application/json; charset=utf-8")
+              .end(Json.encodePrettily(new Error("NOT_FOUND", "User not found")));
+          } else {
+            rc.response()
+              .setStatusCode(200)
+              .putHeader("content-type", "application/json; charset=utf-8")
+              .end(Json.encodePrettily(res.result()));
+          }
+        } else {
+          LOGGER.error("Failed to find all users", res.cause());
+          executionError(rc, res);
+        }
+      });
+    } else {
+      rc.response()
+        .setStatusCode(401)
+        .putHeader("content-type", "application/json; charset=utf-8")
+        .end();
+    }
   }
 
   private void createUser(RoutingContext rc) {
@@ -169,7 +183,9 @@ public class HttpServerVerticle extends AbstractVerticle {
           .put("username", user.getUsername())
           .put("canCreate", true)
           .put("canDelete", true)
-          .put("canUpdate", true),
+          .put("canUpdate", true)
+          .put("canGet", true)
+          .put("canGetAll", true),
           new JWTOptions()
             .setSubject("Wiki API")
             .setIssuer("Vert.x"));
@@ -185,35 +201,49 @@ public class HttpServerVerticle extends AbstractVerticle {
   }
 
   private void updateUser(RoutingContext rc) {
-    String id = rc.request().getParam("id");
+    if (rc.user().principal().getBoolean("canUpdate", false)) {
+      String id = rc.request().getParam("id");
 
-    dbService.updateUserById(id, rc.getBodyAsJson(), res -> {
-      if (res.succeeded()) {
-        rc.response()
-          .setStatusCode(204)
-          .putHeader("content-type", "application/json; charset=utf-8")
-          .end();
-      } else {
-        LOGGER.error("Failed to update user " + id, res.cause());
-        executionError(rc, res);
-      }
-    });
+      dbService.updateUserById(id, rc.getBodyAsJson(), res -> {
+        if (res.succeeded()) {
+          rc.response()
+            .setStatusCode(204)
+            .putHeader("content-type", "application/json; charset=utf-8")
+            .end();
+        } else {
+          LOGGER.error("Failed to update user " + id, res.cause());
+          executionError(rc, res);
+        }
+      });
+    } else {
+      rc.response()
+        .setStatusCode(401)
+        .putHeader("content-type", "application/json; charset=utf-8")
+        .end();
+    }
   }
 
   private void deleteUser(RoutingContext rc) {
-    String id = rc.request().getParam("id");
+    if (rc.user().principal().getBoolean("canDelete", false)) {
+      String id = rc.request().getParam("id");
 
-    dbService.deleteUserById(id, res -> {
-      if (res.succeeded()) {
-        rc.response()
-          .setStatusCode(204)
-          .putHeader("content-type", "application/json; charset=utf-8")
-          .end();
-      } else {
-        LOGGER.error("Failed to delete user " + id, res.cause());
-        executionError(rc, res);
-      }
-    });
+      dbService.deleteUserById(id, res -> {
+        if (res.succeeded()) {
+          rc.response()
+            .setStatusCode(204)
+            .putHeader("content-type", "application/json; charset=utf-8")
+            .end();
+        } else {
+          LOGGER.error("Failed to delete user " + id, res.cause());
+          executionError(rc, res);
+        }
+      });
+    } else {
+      rc.response()
+        .setStatusCode(401)
+        .putHeader("content-type", "application/json; charset=utf-8")
+        .end();
+    }
   }
 
   private Error checkUser(User user) {
