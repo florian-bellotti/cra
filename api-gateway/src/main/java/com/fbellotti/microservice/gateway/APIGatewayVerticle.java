@@ -1,6 +1,6 @@
 package com.fbellotti.microservice.gateway;
 
-import com.fbellotti.microservice.common.RestAPIVerticle;
+import com.fbellotti.vertx.api.RestAPIVerticle;
 import io.vertx.core.Future;
 import io.vertx.core.http.HttpClient;
 import io.vertx.core.http.HttpClientRequest;
