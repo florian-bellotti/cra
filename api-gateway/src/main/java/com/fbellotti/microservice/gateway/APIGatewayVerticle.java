@@ -8,11 +8,12 @@ import io.vertx.core.http.HttpServerOptions;
 import io.vertx.core.http.HttpServerResponse;
 import io.vertx.core.json.JsonObject;
 import io.vertx.core.net.JksOptions;
+import io.vertx.ext.auth.jwt.JWTAuth;
 import io.vertx.ext.web.Router;
 import io.vertx.ext.web.RoutingContext;
 import io.vertx.ext.web.handler.BodyHandler;
+import io.vertx.ext.web.handler.JWTAuthHandler;
 import io.vertx.ext.web.handler.StaticHandler;
-import io.vertx.ext.web.handler.UserSessionHandler;
 import io.vertx.servicediscovery.Record;
 import io.vertx.servicediscovery.ServiceDiscovery;
 import io.vertx.servicediscovery.types.HttpEndpoint;
@@ -34,6 +35,8 @@ public class APIGatewayVerticle extends RestAPIVerticle {
   private static final Logger logger = LoggerFactory.getLogger(APIGatewayVerticle.class);
   private static final int DEFAULT_PORT = 8787;
 
+  private JWTAuth jwtAuth;
+
   @Override
   public void start(Future<Void> future) throws Exception {
     super.start();
@@ -42,34 +45,22 @@ public class APIGatewayVerticle extends RestAPIVerticle {
     String host = config().getString("api.gateway.http.address", "localhost");
     int port = config().getInteger("api.gateway.http.port", DEFAULT_PORT);
 
+    // Create JWTAuth instance
+    jwtAuth = JWTAuth.create(vertx, new JsonObject()
+      .put("keyStore", new JsonObject()
+        .put("path", "keystore.jceks")
+        .put("type", "jceks")
+        .put("password", "secret")));
+
     Router router = Router.router(vertx);
-    // Cookie and session handler
-    enableLocalSession(router);
-
-    // Body handler
-    router.route().handler(BodyHandler.create());
-
-    // Version handler
-    router.get("/api/v").handler(this::apiVersion);
-
-    // Create OAuth 2 instance for Keycloak
-    oauth2 = KeycloakAuth.create(vertx, OAuth2FlowType.AUTH_CODE, config());
-
-    router.route().handler(UserSessionHandler.create(oauth2));
-
-    String hostURI = buildHostURI();
-
-    // Set auth callback handler
-    router.route("/callback").handler(context -> authCallback(oauth2, hostURI, context));
-    router.get("/uaa").handler(this::authUaaHandler);
-    router.get("/login").handler(this::loginEntryHandler);
+    enableLocalSession(router);                       // Cookie and session handler
+    router.route().handler(BodyHandler.create());     // Body handler
+    router.get("/api/v").handler(this::apiVersion);   // Version handler
+    router.route().handler(JWTAuthHandler.create(jwtAuth, "/login")); // Set auth callback handler
+    router.post("/login").handler(this::loginHandler);
     router.post("/logout").handler(this::logoutHandler);
-
-    // Api dispatcher
-    router.route("/api/*").handler(this::dispatchRequests);
-
-    // Static content
-    router.route("/*").handler(StaticHandler.create());
+    router.route("/api/*").handler(this::dispatchRequests);             // Api dispatcher
+    router.route("/*").handler(StaticHandler.create());                 // Static content
 
     // Enable HTTPS
     HttpServerOptions httpServerOptions = new HttpServerOptions()
@@ -92,26 +83,31 @@ public class APIGatewayVerticle extends RestAPIVerticle {
       });
   }
 
+  /**
+   * This method get all endpoints to dispatch request
+   * to the matching service.
+   *
+   * @param context Routing context instance
+   */
   private void dispatchRequests(RoutingContext context) {
     int initialOffset = 5; // length of `/api/`
-    // run with circuit breaker in order to deal with failure
+    // Run with circuit breaker in order to deal with failure
     circuitBreaker.execute(future -> {
       getAllEndpoints().setHandler(ar -> {
         if (ar.succeeded()) {
           List<Record> recordList = ar.result();
-          // get relative path and retrieve prefix to dispatch client
+          // Get relative path and retrieve prefix to dispatch client
           String path = context.request().uri();
-
           if (path.length() <= initialOffset) {
             notFound(context);
             future.complete();
             return;
           }
-          String prefix = (path.substring(initialOffset)
-            .split("/"))[0];
-          // generate new relative path
+
+          String prefix = (path.substring(initialOffset).split("/"))[0];
           String newPath = path.substring(initialOffset + prefix.length());
-          // get one relevant HTTP client, may not exist
+
+          // Get one relevant HTTP client, may not exist
           Optional<Record> client = recordList.stream()
             .filter(record -> record.getMetadata().getString("api.name") != null)
             .filter(record -> record.getMetadata().getString("api.name").equals(prefix))
@@ -137,9 +133,9 @@ public class APIGatewayVerticle extends RestAPIVerticle {
   /**
    * Dispatch the request to the downstream REST layers.
    *
-   * @param context routing context instance
-   * @param path    relative path
-   * @param client  relevant HTTP client
+   * @param context Routing context instance
+   * @param path    Relative path
+   * @param client  Relevant HTTP client
    */
   private void doDispatch(RoutingContext context, String path, HttpClient client, Future<Object> cbFuture) {
     HttpClientRequest toReq = client
@@ -175,6 +171,11 @@ public class APIGatewayVerticle extends RestAPIVerticle {
     }
   }
 
+  /**
+   * Return the current API version (which is v1)
+   *
+   * @param context Routing context instance
+   */
   private void apiVersion(RoutingContext context) {
     context.response()
       .end(new JsonObject().put("version", "v1").encodePrettily());
@@ -183,7 +184,7 @@ public class APIGatewayVerticle extends RestAPIVerticle {
   /**
    * Get all REST endpoints from the service discovery infrastructure.
    *
-   * @return async result
+   * @return Async result
    */
   private Future<List<Record>> getAllEndpoints() {
     Future<List<Record>> future = Future.future();
@@ -192,97 +193,29 @@ public class APIGatewayVerticle extends RestAPIVerticle {
     return future;
   }
 
-  // log methods
+  /**
+   * Authenticate the user. If username and password are valid, it
+   * generate a JWT token.
+   *
+   * @param context Routing context instance
+   */
+  private void loginHandler(RoutingContext context) {
+    JsonObject creds = new JsonObject()
+      .put("username", context.getBodyAsJson().getString("username"))
+      .put("password", context.getBodyAsJson().getString("password"));
 
-  private void publishGatewayLog(String info) {
-    JsonObject message = new JsonObject()
-      .put("info", info)
-      .put("time", System.currentTimeMillis());
-    publishLogEvent("gateway", message);
+    // TODO : Authentication
+    context.response().setStatusCode(500).end();
   }
 
-  private void publishGatewayLog(JsonObject msg) {
-    JsonObject message = msg.copy()
-      .put("time", System.currentTimeMillis());
-    publishLogEvent("gateway", message);
-  }
-
-  // auth
-
-  private void authCallback(OAuth2Auth oauth2, String hostURL, RoutingContext context) {
-    final String code = context.request().getParam("code");
-    // code is a require value
-    if (code == null) {
-      context.fail(400);
-      return;
-    }
-    final String redirectTo = context.request().getParam("redirect_uri");
-    final String redirectURI = hostURL + context.currentRoute().getPath() + "?redirect_uri=" + redirectTo;
-    oauth2.getToken(new JsonObject().put("code", code).put("redirect_uri", redirectURI), ar -> {
-      if (ar.failed()) {
-        logger.warn("Auth fail");
-        context.fail(ar.cause());
-      } else {
-        logger.info("Auth success");
-        context.setUser(ar.result());
-        context.response()
-          .putHeader("Location", redirectTo)
-          .setStatusCode(302)
-          .end();
-      }
-    });
-  }
-
-  private void authUaaHandler(RoutingContext context) {
-    if (context.user() != null) {
-      JsonObject principal = context.user().principal();
-      String username = null;  // TODO: Only for demo. Complete this in next version.
-      // String username = KeycloakHelper.preferredUsername(principal);
-      if (username == null) {
-        context.response()
-          .putHeader("content-type", "application/json")
-          .end(new Account().setId("TEST666").setUsername("Eric").toString()); // TODO: no username should be an error
-      } else {
-        Future<AccountService> future = Future.future();
-        EventBusService.getProxy(discovery, AccountService.class, future.completer());
-        future.compose(accountService -> {
-          Future<Account> accountFuture = Future.future();
-          accountService.retrieveByUsername(username, accountFuture.completer());
-          return accountFuture.map(a -> {
-            ServiceDiscovery.releaseServiceObject(discovery, accountService);
-            return a;
-          });
-        })
-          .setHandler(resultHandlerNonEmpty(context)); // if user does not exist, should return 404
-      }
-    } else {
-      context.fail(401);
-    }
-  }
-
-  private void loginEntryHandler(RoutingContext context) {
-    context.response()
-      .putHeader("Location", generateAuthRedirectURI(buildHostURI()))
-      .setStatusCode(302)
-      .end();
-  }
-
+  /**
+   * Clear user and destroy session
+   *
+   * @param context Routing context instance
+   */
   private void logoutHandler(RoutingContext context) {
     context.clearUser();
     context.session().destroy();
     context.response().setStatusCode(204).end();
-  }
-
-  private String generateAuthRedirectURI(String from) {
-    return oauth2.authorizeURL(new JsonObject()
-      .put("redirect_uri", from + "/callback?redirect_uri=" + from)
-      .put("scope", "")
-      .put("state", ""));
-  }
-
-  private String buildHostURI() {
-    int port = config().getInteger("api.gateway.http.port", DEFAULT_PORT);
-    final String host = config().getString("api.gateway.http.address.external", "localhost");
-    return String.format("https://%s:%d", host, port);
   }
 }

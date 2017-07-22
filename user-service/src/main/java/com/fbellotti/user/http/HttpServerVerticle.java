@@ -161,6 +161,10 @@ public class HttpServerVerticle extends AbstractVerticle {
   private void openSession(RoutingContext rc) {
     User user = Json.decodeValue(rc.getBodyAsString(), User.class);
 
+    System.out.println(rc.user());
+    System.out.println(rc.toString());
+
+
     // Check the received user
     Error error = checkUser(user);
     if (error != null) {

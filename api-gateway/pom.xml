@@ -12,11 +12,14 @@
 
     <artifactId>api-gateway</artifactId>
 
+    <properties>
+        <main.verticle>com.fbellotti.microservice.gateway.APIGatewayVerticle</main.verticle>
+    </properties>
+
     <dependencies>
         <dependency>
-            <groupId>com.fbellotti</groupId>
-            <artifactId>cra-common</artifactId>
-            <version>${project.version}</version>
+            <groupId>io.vertx</groupId>
+            <artifactId>vertx-auth-jwt</artifactId>
         </dependency>
     </dependencies>
 
