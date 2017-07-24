@@ -1,0 +1,6 @@
+{
+  "api.name": "event",
+  "store.http.address": "event-microservice",
+  "store.http.port": 8090,
+  "host": "mongo"
+}

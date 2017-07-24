@@ -1,0 +1,4 @@
+{
+  "api.name": "event",
+  "store.http.port": 8090
+}
