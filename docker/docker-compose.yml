@@ -1,0 +1,40 @@
+version: "2"
+services:
+  config-server:
+    image: httpd:alpine
+    ports:
+      - "8000:80"
+    volumes:
+      - ${DIR}/config-server:/usr/local/apache2/htdocs:ro
+  mongo:
+    image: mongo:latest
+    expose:
+      - "27017"
+  elasticsearch:
+    image: elasticsearch
+    ports:
+      - "9200:9200"
+      - "9300:9300"
+    command: elasticsearch
+    environment:
+      ES_JAVA_OPTS: "-Xms1g -Xmx1g"
+  logstash:
+    image: logstash
+    ports:
+      - "12201:12201/udp"
+    command: -e 'input { gelf { host => "0.0.0.0" port => 12201 } }
+              output { elasticsearch { hosts => ["elasticsearch"] } }'
+    links:
+      - elasticsearch
+    depends_on:
+      - elasticsearch
+  event-microservice:
+    image: cra/event-microservice
+    links:
+      - mongo
+      - logstash
+    depends_on:
+      - mongo
+      - logstash
+    expose:
+      - "8090"
